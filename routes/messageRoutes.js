@@ -1,26 +1,18 @@
 const express = require('express');
 const router = express.Router();
-const { 
-  sendMessage, 
-  getMessages, 
-  markMessageRead 
+const {
+  createMessage,
+  getMessages,
+  markMessageAsRead,
+  deleteMessage,
 } = require('../controllers/messageController');
-
-// ⬇️ UPDATE IMPORTS: Use 'authorize' instead of 'admin'
-const { protect, authorize } = require('../middleware/authMiddleware');
+const { protect, admin } = require('../middleware/authMiddleware');
 
 router.route('/')
-  .post(sendMessage) // Public: Anyone can send a message
-  .get(
-    protect, 
-    authorize('manage_users'), // ⬅️ UPDATED: Only Admins/Support can read
-    getMessages
-  );
+  .post(createMessage) // Public: Anyone can send a message
+  .get(protect, admin, getMessages); // Private: Only Admin can read them
 
-router.route('/:id/read').put(
-  protect, 
-  authorize('manage_users'), // ⬅️ UPDATED
-  markMessageRead
-);
+router.route('/:id/read').put(protect, admin, markMessageAsRead);
+router.route('/:id').delete(protect, admin, deleteMessage);
 
 module.exports = router;
