@@ -1,45 +1,36 @@
-// backend/routes/uploadRoutes.js
-const path = require('path');
 const express = require('express');
 const multer = require('multer');
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const dotenv = require('dotenv');
+
+dotenv.config();
 
 const router = express.Router();
 
-// 1. Configure where to save the files
-const storage = multer.diskStorage({
-  destination(req, file, cb) {
-    cb(null, 'uploads/'); // Files will be saved in the 'uploads' folder
-  },
-  filename(req, file, cb) {
-    // We name the file: fieldname-date.extension (e.g., image-20251225.jpg)
-    cb(null, `${file.fieldname}-${Date.now()}${path.extname(file.originalname)}`);
+// 1. Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+// 2. Configure Storage Engine
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'napster-imports', // The folder name in your Cloudinary account
+    allowed_formats: ['jpg', 'png', 'jpeg', 'webp', 'mp4'],
+    resource_type: 'auto', // Allows both Images and Videos
   },
 });
 
-// 2. Filter checks (Allow Images & Videos)
-function checkFileType(file, cb) {
-  const filetypes = /jpg|jpeg|png|webp|mp4|mov|avi|mkv/; // 🟢 Added Video Formats
-  const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
-  const mimetype = filetypes.test(file.mimetype);
+const upload = multer({ storage });
 
-  if (extname && mimetype) {
-    return cb(null, true);
-  } else {
-    cb('Error: Images and Videos Only!');
-  }
-}
-
-const upload = multer({
-  storage,
-  fileFilter: function (req, file, cb) {
-    checkFileType(file, cb);
-  },
-});
-
-// 3. The actual route
-// We use 'image' as the key because your frontend sends formData.append('image', file)
+// 3. The Upload Route
 router.post('/', upload.single('image'), (req, res) => {
-  res.send(`/${req.file.path.replace(/\\/g, '/')}`); // Returns the path to the frontend
+  // Cloudinary returns the full URL (https://res.cloudinary.com/...)
+  res.send(req.file.path); 
 });
 
 module.exports = router;
