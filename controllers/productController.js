@@ -63,9 +63,12 @@ const createProduct = asyncHandler(async (req, res) => {
     price: 0,
     user: req.user._id,
     image: '/images/sample.jpg',
+    images: [], // 🟢 Added Default
     video: '', 
     brand: 'Sample Brand',
     category: 'Sample Category',
+    shippingCategory: 'sea', // 🟢 Added Default
+    weight: 0.5, // 🟢 Added Default
     countInStock: 0,
     numReviews: 0,
     description: 'Sample description',
@@ -88,6 +91,9 @@ const updateProduct = asyncHandler(async (req, res) => {
     brand,
     category,
     countInStock,
+    images,           // 🟢 FIX: Get images from request
+    shippingCategory, // 🟢 FIX: Get shipping type
+    weight            // 🟢 FIX: Get weight
   } = req.body;
 
   const product = await Product.findById(req.params.id);
@@ -101,6 +107,11 @@ const updateProduct = asyncHandler(async (req, res) => {
     product.brand = brand;
     product.category = category;
     product.countInStock = countInStock;
+    
+    // 🟢 SAVE THE NEW DATA
+    product.images = images; 
+    product.shippingCategory = shippingCategory;
+    product.weight = weight;
 
     const updatedProduct = await product.save();
     res.json(updatedProduct);
@@ -110,7 +121,6 @@ const updateProduct = asyncHandler(async (req, res) => {
   }
 });
 
-// ⬇️ NEW: Create new review
 // @desc    Create new review
 // @route   POST /api/products/:id/reviews
 // @access  Private
@@ -152,7 +162,6 @@ const createProductReview = asyncHandler(async (req, res) => {
   }
 });
 
-// ⬇️ NEW: Get top rated products
 // @desc    Get top rated products
 // @route   GET /api/products/top
 // @access  Public
@@ -167,6 +176,6 @@ module.exports = {
   deleteProduct,
   createProduct,
   updateProduct,
-  createProductReview, // ⬅️ Added
-  getTopProducts,      // ⬅️ Added
+  createProductReview,
+  getTopProducts,
 };
