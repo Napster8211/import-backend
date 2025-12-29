@@ -39,7 +39,7 @@ exports.createPaymentLink = async (req, res) => {
       customer_email: userEmail,
       client_reference: orderId.toString(),
       description: `Order #${orderId}`,
-      redirect_url: `https://napster-hub.vercel.app/orders/${orderId}`, // Update this domain if needed!
+      redirect_url: `https://napsterimports.vercel.app/orders/${orderId}`, // Update this domain if needed!
       callback_url: `${process.env.BACKEND_URL || 'https://import-backend-7cfn.onrender.com'}/api/payment/webhook`
     };
     
