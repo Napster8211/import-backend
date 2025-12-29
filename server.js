@@ -27,12 +27,13 @@ app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/products', require('./routes/productRoutes'));
 app.use('/api/orders', require('./routes/orderRoutes'));
 app.use('/api/upload', require('./routes/uploadRoutes'));
-
-// 🟢 NEW: Messages Route (Fixes the "Failed to load messages" error)
 app.use('/api/messages', require('./routes/messageRoutes'));
 
+// 🟢 NEW: Payment Route (This was missing!)
+// This connects https://your-site/api/payment/create -> paymentRoutes.js
+app.use('/api/payment', require('./routes/paymentRoutes'));
+
 // 📂 MAKE UPLOADS FOLDER PUBLIC
-// This allows the frontend to access images at: https://your-backend.com/uploads/image.jpg
 const dirname = path.resolve();
 app.use('/uploads', express.static(path.join(dirname, '/uploads')));
 
