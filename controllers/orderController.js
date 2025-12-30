@@ -1,5 +1,6 @@
 const asyncHandler = require('express-async-handler');
 const Order = require('../models/Order');
+const ShippingConfig = require('../models/ShippingConfig'); // 🟢 Imported the Shipping "Brain"
 
 // @desc    Create new order
 // @route   POST /api/orders
@@ -11,14 +12,82 @@ const addOrderItems = asyncHandler(async (req, res) => {
     paymentMethod,
     itemsPrice,
     taxPrice,
-    shippingPrice,
-    totalPrice,
+    // shippingPrice, // 🔴 We ignore the frontend price now
+    // totalPrice,    // 🔴 We recalculate this to be safe
   } = req.body;
 
   if (orderItems && orderItems.length === 0) {
     res.status(400);
     throw new Error('No order items');
   } else {
+    
+    // 🚚 SHIPPING CALCULATION ENGINE (Tickets 2 & 3)
+    let finalShippingFee = 0;
+    
+    try {
+      // 1. Fetch Shipping Rules
+      const config = await ShippingConfig.findOne();
+      
+      if (!config) {
+        console.warn("⚠️ No Shipping Config found. Using fallback fee.");
+        finalShippingFee = 50; // Safety fallback
+      } else {
+        const rates = config.getDerivedRates();
+        
+        let totalSeaWeight = 0;
+        let totalAirWeight = 0;
+
+        // 2. Separate Items by Category (Sea vs Air)
+        orderItems.forEach(item => {
+            // Default to 0.5kg if missing
+            const weight = item.weight || 0.5; 
+            // Default to 'sea' if missing
+            const method = item.shippingCategory || 'sea'; 
+
+            if (method === 'air') {
+                totalAirWeight += (weight * item.qty);
+            } else {
+                totalSeaWeight += (weight * item.qty);
+            }
+        });
+
+        // 3. Calculate Sea Shipping (Ticket 2)
+        // Rule: Round UP to nearest 0.1kg
+        totalSeaWeight = Math.ceil(totalSeaWeight * 10) / 10;
+        
+        let seaFee = 0;
+        if (totalSeaWeight > 0) {
+            seaFee = totalSeaWeight * rates.derived.finalSeaRatePerKg;
+            // Enforce Minimum Sea Fee
+            seaFee = Math.max(seaFee, config.minSeaShippingFee);
+        }
+
+        // 4. Calculate Air Shipping (Ticket 3)
+        // Rule: Enforce minimum chargeable weight
+        let airFee = 0;
+        if (totalAirWeight > 0) {
+            // Ensure min weight per shipment (e.g. 0.1kg)
+            totalAirWeight = Math.max(totalAirWeight, config.minAirChargeableWeight);
+            totalAirWeight = Math.ceil(totalAirWeight * 10) / 10; // Rounding
+            
+            airFee = totalAirWeight * config.airRatePerKg;
+        }
+
+        finalShippingFee = seaFee + airFee;
+        
+        // Round final fee to 2 decimal places
+        finalShippingFee = Math.round(finalShippingFee * 100) / 100;
+        
+        console.log(`🚢 Shipping Calc: Sea(${totalSeaWeight}kg) + Air(${totalAirWeight}kg) = GH₵${finalShippingFee}`);
+      }
+    } catch (err) {
+      console.error("Shipping Calc Error:", err);
+      finalShippingFee = 50; // Fallback on error
+    }
+
+    // 5. Recalculate Total Price (Safety Check)
+    const safeTotalPrice = Number(itemsPrice) + Number(taxPrice) + Number(finalShippingFee);
+
     const order = new Order({
       orderItems,
       user: req.user._id,
@@ -26,8 +95,8 @@ const addOrderItems = asyncHandler(async (req, res) => {
       paymentMethod,
       itemsPrice,
       taxPrice,
-      shippingPrice,
-      totalPrice,
+      shippingPrice: finalShippingFee, // 🟢 The calculated fee
+      totalPrice: safeTotalPrice,      // 🟢 The safe total
     });
 
     const createdOrder = await order.save();
