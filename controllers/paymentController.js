@@ -3,73 +3,64 @@ const axios = require('axios');
 const dotenv = require('dotenv');
 dotenv.config();
 
-// 🟢 HARDCODED CONFIGURATION (Guaranteed to work)
-// 1. Your Render Backend URL (Where Moolre sends the webhook confirmation)
+// 🟢 HARDCODED CONFIGURATION
 const BACKEND_URL = 'https://import-backend-7cfn.onrender.com';
-
-// 2. Your Vercel Frontend URL (Where users go after payment)
-// ✅ Updated to your specific URL
 const FRONTEND_URL = 'https://napsterimports.vercel.app'; 
 
-// @desc    Create Payment Link (Redirect Flow)
-// @route   POST /api/payment/create
-// @access  Private
 exports.createPaymentLink = async (req, res) => {
   const { orderId, amount, userEmail } = req.body;
 
   console.log("------------------------------------------------");
-  console.log("🐞 DEBUG: Starting Payment Initiation");
-  
-  // 1. Validate Keys
-  if (!process.env.MOOLRE_SECRET_KEY) {
-    console.error("❌ CRITICAL: MOOLRE_SECRET_KEY is missing from .env!");
-    return res.status(500).json({ message: 'Server Config Error: Missing API Key' });
+  console.log("🐞 DEBUG: Starting Moolre Payment Link Generation");
+
+  // 1. Validate NEW Required Keys
+  if (!process.env.MOOLRE_PUBKEY || !process.env.MOOLRE_USER || !process.env.MOOLRE_ACC_NUM) {
+    console.error("❌ CRITICAL: Missing Moolre Config!");
+    console.error("Required: MOOLRE_PUBKEY, MOOLRE_USER, MOOLRE_ACC_NUM");
+    return res.status(500).json({ message: 'Server Config Error: Missing Moolre Keys' });
   }
 
   try {
-    // 2. Check Order
     const order = await Order.findById(orderId);
     if (!order) return res.status(404).json({ message: 'Order not found' });
 
-    // 🟢 3. Construct Valid URLs
-    // We use the hardcoded strings to ensure they are never "undefined"
-    const finalRedirectUrl = `${FRONTEND_URL}/orders/${orderId}`;
-    const finalCallbackUrl = `${BACKEND_URL}/api/payment/webhook`;
-
-    console.log("🔗 Redirect URL:", finalRedirectUrl);
-    console.log("🔗 Callback URL:", finalCallbackUrl);
-
-    // 4. Prepare Payload for Moolre
+    // 2. Prepare Payload (Docs Page 26)
+    // URL: https://api.moolre.com/embed/link
     const payload = {
-      amount: amount,
+      type: 1, // Required by Moolre
+      amount: amount, // Amount in Decimals (e.g., 15.00)
       currency: "GHS",
-      customer_email: userEmail,
-      client_reference: orderId.toString(),
-      description: `Order #${orderId}`,
-      redirect_url: finalRedirectUrl,
-      callback_url: finalCallbackUrl
+      email: userEmail,
+      reusable: 0, // 0 = One-time payment
+      externalref: orderId.toString(), // Unique ID
+      callback: `${BACKEND_URL}/api/payment/webhook`,
+      redirect: `${FRONTEND_URL}/orders/${orderId}`, // Where user goes after payment
+      accountnumber: process.env.MOOLRE_ACC_NUM // <--- REQUIRED from Docs
     };
 
-    console.log("🚀 Sending Payload to Moolre...");
+    console.log("🚀 Sending Payload to Moolre:", JSON.stringify(payload, null, 2));
 
-    // 5. Call Moolre API
-    const moolreResponse = await axios.post('https://api.moolre.com/v1/checkout/initiate', payload, {
+    // 3. Call Moolre API
+    const moolreResponse = await axios.post('https://api.moolre.com/embed/link', payload, {
       headers: {
         'Content-Type': 'application/json',
-        'X-API-KEY': process.env.MOOLRE_SECRET_KEY
+        'X-API-USER': process.env.MOOLRE_USER,    // <--- Your Moolre Username
+        'X-API-PUBKEY': process.env.MOOLRE_PUBKEY // <--- Your PUBLIC Key
       }
     });
 
     console.log("✅ Moolre Success:", moolreResponse.data);
 
-    // 6. Return the URL to Frontend
-    if (moolreResponse.data && moolreResponse.data.checkout_url) {
+    // 4. Handle Response
+    // Docs Page 26: Response contains "authorization_url"
+    if (moolreResponse.data && moolreResponse.data.data && moolreResponse.data.data.authorization_url) {
       return res.status(200).json({
         status: 'success',
-        url: moolreResponse.data.checkout_url
+        url: moolreResponse.data.data.authorization_url
       });
     } else {
-      throw new Error("No checkout_url in response");
+      console.error("❌ No authorization_url found:", moolreResponse.data);
+      throw new Error("Invalid response from payment provider");
     }
 
   } catch (error) {
@@ -84,25 +75,28 @@ exports.createPaymentLink = async (req, res) => {
   }
 };
 
-// @desc    Moolre Webhook
-// @route   POST /api/payment/webhook
 exports.handleWebhook = async (req, res) => {
-  const { client_reference, status, transaction_id } = req.body;
+  // Docs Page 29: Webhook format
+  const { status, message, data } = req.body;
 
-  if (status !== 'SUCCESS') return res.status(200).send('OK');
+  // status 1 means Successful [cite: 549]
+  if (status !== 1) return res.status(200).send('OK');
 
   try {
-    const order = await Order.findById(client_reference);
+    // The 'externalref' we sent is the Order ID
+    const orderId = data.externalref;
+    
+    const order = await Order.findById(orderId);
     if (order) {
       order.isPaid = true;
       order.paidAt = Date.now();
       order.paymentResult = {
-        id: transaction_id,
-        status: status,
-        email_address: req.body.customer_email,
+        id: data.transactionid,
+        status: 'SUCCESS',
+        email_address: data.payer,
       };
       await order.save();
-      console.log(`✅ Order ${client_reference} Paid!`);
+      console.log(`✅ Order ${orderId} Paid! Ref: ${data.transactionid}`);
     }
     res.status(200).send('Webhook received');
   } catch (error) {
