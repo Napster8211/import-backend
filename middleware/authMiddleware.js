@@ -8,32 +8,45 @@ const PERMISSIONS = {
   UPDATE_ORDER_STATUS: 'update_order_status',
   VIEW_PAYMENTS: 'view_payments',
   CONFIRM_PAYMENTS: 'confirm_payments',
-  MANAGE_SHIPMENTS: 'manage_shipments', // ⬅️ The one crashing your app
+  MANAGE_SHIPMENTS: 'manage_shipments', 
   MANAGE_USERS: 'manage_users',
   VIEW_REPORTS: 'view_reports',
   SYSTEM_SETTINGS: 'system_settings',
+  
+  // 🟢 NEW SHIPPING PERMISSIONS (Ticket 10)
+  VIEW_SHIPPING_RATES: 'view_shipping_rates',
+  MANAGE_SHIPPING_RATES: 'manage_shipping_rates',
+  VIEW_AUDIT_LOGS: 'view_audit_logs'
 };
 
 // 2. Define Who Can Do What
 const ROLE_PERMISSIONS = {
   super_admin: Object.values(PERMISSIONS), // Can do everything
+
   operations: [
     PERMISSIONS.VIEW_ORDERS,
     PERMISSIONS.UPDATE_ORDER_STATUS,
     PERMISSIONS.MANAGE_SHIPMENTS,
+    PERMISSIONS.VIEW_SHIPPING_RATES, // 🟢 Operations can SEE rates
   ],
+
   finance: [
     PERMISSIONS.VIEW_PAYMENTS,
     PERMISSIONS.CONFIRM_PAYMENTS,
     PERMISSIONS.VIEW_REPORTS,
+    PERMISSIONS.VIEW_SHIPPING_RATES,   // 🟢 Finance can SEE rates
+    PERMISSIONS.MANAGE_SHIPPING_RATES, // 🟢 Finance can EDIT rates
   ],
+
   support: [
     PERMISSIONS.VIEW_ORDERS,
   ],
+
   viewer: [
-    PERMISSIONS.VIEW_REPORTS, // Can only read reports
+    PERMISSIONS.VIEW_REPORTS, 
   ],
-  user: [], // Customers have NO admin permissions
+
+  user: [], 
 };
 
 // --- MIDDLEWARE FUNCTIONS ---
@@ -71,7 +84,7 @@ const admin = (req, res, next) => {
   }
 };
 
-// 🟢 NEW: Fine-Grained Permission Check
+// 🟢 Fine-Grained Permission Check
 const authorize = (requiredPermission) => {
   return (req, res, next) => {
     if (!req.user || !req.user.role) {
@@ -92,4 +105,5 @@ const authorize = (requiredPermission) => {
   };
 };
 
-module.exports = { protect, admin, authorize };
+// We export PERMISSIONS too so we can use the strings in our routes safely
+module.exports = { protect, admin, authorize, PERMISSIONS };

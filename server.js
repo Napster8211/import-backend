@@ -29,6 +29,8 @@ app.use('/api/orders', require('./routes/orderRoutes'));
 app.use('/api/upload', require('./routes/uploadRoutes'));
 app.use('/api/messages', require('./routes/messageRoutes'));
 app.use('/api/shipping', require('./routes/shippingRoutes'));
+// ... existing imports
+app.use('/api/batches', require('./routes/batchRoutes'));
 
 // 🟢 NEW: Payment Route (This was missing!)
 // This connects https://your-site/api/payment/create -> paymentRoutes.js

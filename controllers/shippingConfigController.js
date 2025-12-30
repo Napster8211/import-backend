@@ -1,52 +1,91 @@
 const ShippingConfig = require('../models/ShippingConfig');
+const ShippingLog = require('../models/ShippingLog'); // 🟢 Import the Logger
 
 // @desc    Get Current Shipping Configuration
 // @route   GET /api/shipping/config
 // @access  Private/Admin
 exports.getShippingConfig = async (req, res) => {
   try {
-    // Try to find the existing config
     let config = await ShippingConfig.findOne();
-
-    // If no config exists (first run), create a default one
     if (!config) {
       config = await ShippingConfig.create({});
-      console.log("⚙️ Initialized Default Shipping Configuration");
     }
-
-    // Return config with the calculated derived rates
     res.json(config.getDerivedRates());
   } catch (error) {
     res.status(500).json({ message: 'Server Error', error: error.message });
   }
 };
 
-// @desc    Update Shipping Configuration
+// @desc    Update Shipping Configuration & Log Changes (Ticket 9)
 // @route   PUT /api/shipping/config
 // @access  Private/Admin
 exports.updateShippingConfig = async (req, res) => {
   try {
     const config = await ShippingConfig.findOne();
 
-    if (config) {
-      // Update fields if they are sent in the request
-      config.usdToGhsRate = req.body.usdToGhsRate || config.usdToGhsRate;
-      config.seaCbmRateUsd = req.body.seaCbmRateUsd || config.seaCbmRateUsd;
-      config.seaBufferPercentage = req.body.seaBufferPercentage || config.seaBufferPercentage;
-      config.minSeaShippingFee = req.body.minSeaShippingFee || config.minSeaShippingFee;
-      config.airRatePerKg = req.body.airRatePerKg || config.airRatePerKg;
-      config.minAirChargeableWeight = req.body.minAirChargeableWeight || config.minAirChargeableWeight;
-      
-      // Track who changed it
-      config.lastUpdatedBy = req.user._id;
-      config.lastUpdatedAt = Date.now();
-
-      const updatedConfig = await config.save();
-      res.json(updatedConfig.getDerivedRates());
-    } else {
-      res.status(404).json({ message: 'Configuration not found' });
+    if (!config) {
+      return res.status(404).json({ message: 'Configuration not found' });
     }
+
+    // 🟢 1. Detect Changes
+    const changes = [];
+    const fieldsToCheck = [
+      'usdToGhsRate', 
+      'seaCbmRateUsd', 
+      'seaBufferPercentage', 
+      'minSeaShippingFee', 
+      'airRatePerKg', 
+      'minAirChargeableWeight'
+    ];
+
+    fieldsToCheck.forEach(field => {
+      // If the value in body is different from DB, log it
+      if (req.body[field] !== undefined && req.body[field] != config[field]) {
+        changes.push({
+          field: field,
+          oldValue: config[field],
+          newValue: req.body[field]
+        });
+        // Update the config object
+        config[field] = req.body[field];
+      }
+    });
+
+    // 🟢 2. Save Audit Log (If there were changes)
+    if (changes.length > 0) {
+      await ShippingLog.create({
+        adminUser: req.user._id,
+        action: 'UPDATE_RATES',
+        changes: changes,
+        ipAddress: req.ip
+      });
+      console.log(`📝 Audit Log Created: ${changes.length} changes by ${req.user.name}`);
+    }
+
+    // 3. Save the Config
+    config.lastUpdatedBy = req.user._id;
+    config.lastUpdatedAt = Date.now();
+    const updatedConfig = await config.save();
+    
+    res.json(updatedConfig.getDerivedRates());
+
   } catch (error) {
     res.status(500).json({ message: 'Update Failed', error: error.message });
+  }
+};
+
+// @desc    Get Change History (Ticket 9)
+// @route   GET /api/shipping/logs
+// @access  Private/Admin
+exports.getShippingLogs = async (req, res) => {
+  try {
+    const logs = await ShippingLog.find({})
+      .populate('adminUser', 'name email')
+      .sort({ timestamp: -1 }) // Newest first
+      .limit(50); // Keep it fast
+    
+    res.json(logs);
+  } catch (error) {
+    res.status(500).json({ message: 'Fetch Logs Failed', error: error.message });
   }
 };
