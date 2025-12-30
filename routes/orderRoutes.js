@@ -9,48 +9,56 @@ const {
   updateOrderToDelivered,
   getMyOrders,
   getOrders,
-  updateOrderStatus, // ⬅️ Must match controller export
+  updateOrderStatus,
 } = require('../controllers/orderController');
 
-// 2. Import Middleware
-const { protect, authorize } = require('../middleware/authMiddleware');
+// 2. Import Middleware & Permissions
+const { protect, authorize, PERMISSIONS } = require('../middleware/authMiddleware');
 
 // 3. Define Routes
 
-// Public / Customer Routes
+// --- PUBLIC / CUSTOMER ROUTES ---
+// Any logged-in user can create an order or see "My Orders"
 router.route('/').post(protect, addOrderItems);
 router.route('/myorders').get(protect, getMyOrders);
 
-// 🔒 RESTRICTED ROUTES (Admin / Operations / Finance)
+// --- 🔒 STAFF RESTRICTED ROUTES ---
 
-// View All Orders (Operations & Above)
+// 1. View All Orders
+// Allowed: Support, Operations, Finance, Super Admin
 router.route('/').get(
   protect, 
-  authorize('view_orders'), 
+  authorize(PERMISSIONS.VIEW_ORDERS), 
   getOrders
 );
 
-// Get Single Order (Anyone with ID, but frontend protects visibility)
+// 2. Get Single Order
+// Note: We do NOT add strict permission middleware here because 
+// regular customers need to access this too (if they own the order).
+// The Controller logic handles the "Owner vs Admin" check.
 router.route('/:id').get(protect, getOrderById);
 
-// Pay Order (Finance Only)
+// 3. Pay Order
+// Allowed: Finance Only
 router.route('/:id/pay').put(
   protect, 
-  authorize('confirm_payments'), 
+  authorize(PERMISSIONS.CONFIRM_PAYMENTS), 
   updateOrderToPaid
 );
 
-// Mark as Delivered (Operations Only)
+// 4. Mark as Delivered
+// Allowed: Operations Only
 router.route('/:id/deliver').put(
   protect, 
-  authorize('update_order_status'), 
+  authorize(PERMISSIONS.UPDATE_ORDER_STATUS), 
   updateOrderToDelivered
 );
 
-// Update Custom Status (Processing -> Shipped) (Operations Only)
+// 5. Update Custom Status (Processing -> Shipped)
+// Allowed: Operations Only
 router.route('/:id/status').put(
   protect, 
-  authorize('update_order_status'), 
+  authorize(PERMISSIONS.UPDATE_ORDER_STATUS), 
   updateOrderStatus
 );
 

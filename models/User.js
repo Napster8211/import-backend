@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs'); // 1. Require bcrypt
+const bcrypt = require('bcryptjs');
 
 const userSchema = mongoose.Schema(
   {
@@ -21,11 +21,12 @@ const userSchema = mongoose.Schema(
       required: true,
       default: false,
     },
+    // 🟢 Your Custom Roles
     role: {
       type: String,
       required: true,
-      default: 'user', // Default role is 'user'
-      enum: ['user', 'admin', 'super_admin', 'operations', 'finance', 'support', 'viewer'],
+      default: 'user',
+      enum: ['user', 'super_admin', 'operations', 'finance', 'support', 'viewer'],
     },
   },
   {
@@ -33,21 +34,22 @@ const userSchema = mongoose.Schema(
   }
 );
 
-// 🟢 FIX 1: Add the matchPassword method
 userSchema.methods.matchPassword = async function (enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
 };
 
-// 🟢 FIX 2: Encrypt password automatically before saving
-userSchema.pre('save', async function (next) {
+// 🟢 FIX: Correct Pre-Save Hook
+// We remove 'next' and use pure async/await to prevent errors
+userSchema.pre('save', async function () {
+  // If password is NOT modified, we simply return (stop here)
   if (!this.isModified('password')) {
-    next();
+    return;
   }
 
+  // Otherwise, we hash the password
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
 });
 
 const User = mongoose.model('User', userSchema);
-
 module.exports = User;
