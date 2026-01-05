@@ -12,15 +12,12 @@ const authUser = asyncHandler(async (req, res) => {
   console.log('\n====================================');
   console.log('📢 LOGIN REQUEST RECEIVED');
   console.log('📧 Email:', email);
-  // We mask the password for safety in logs, but confirm we got one
-  console.log('🔑 Password:', password ? '******** (Received)' : 'MISSING ❌');
 
   // 🕵️‍♂️ DEBUG: STEP 2 - Database Search
   const user = await User.findOne({ email });
 
   if (!user) {
     console.log('❌ DATABASE: User NOT found.');
-    console.log('⚠️  CHECK: Is your Backend connected to the same DB as your Admin Account?');
     res.status(401);
     throw new Error('Invalid email or password (User not found)');
   } 
@@ -30,18 +27,17 @@ const authUser = asyncHandler(async (req, res) => {
 
   // 🕵️‍♂️ DEBUG: STEP 3 - Password Check
   const isMatch = await user.matchPassword(password);
-  console.log('🤔 Checking Password...', isMatch ? 'MATCH ✅' : 'FAIL ❌');
 
   if (isMatch) {
     console.log('🎉 SUCCESS: Sending Token...');
     console.log('====================================\n');
     
-    // Check if user is active (optional security)
     res.json({
       _id: user._id,
       name: user.name,
       email: user.email,
-      role: user.role, // Send role to frontend
+      isAdmin: user.isAdmin, // 🟢 Added for compatibility
+      role: user.role,       // 🟢 CRITICAL: This allows Support/Finance access
       token: generateToken(user._id),
     });
   } else {
@@ -64,7 +60,7 @@ const registerUser = asyncHandler(async (req, res) => {
     throw new Error('User already exists');
   }
 
-  // Default role is 'user' unless specified
+  // Default role is 'user'
   const user = await User.create({
     name,
     email,
@@ -77,7 +73,8 @@ const registerUser = asyncHandler(async (req, res) => {
       _id: user._id,
       name: user.name,
       email: user.email,
-      role: user.role,
+      isAdmin: user.isAdmin, // 🟢 Added
+      role: user.role,       // 🟢 Added
       token: generateToken(user._id),
     });
   } else {
@@ -108,6 +105,7 @@ const getUserProfile = asyncHandler(async (req, res) => {
       _id: user._id,
       name: user.name,
       email: user.email,
+      isAdmin: user.isAdmin,
       role: user.role,
     });
   } else {
@@ -134,7 +132,8 @@ const updateUserProfile = asyncHandler(async (req, res) => {
       _id: updatedUser._id,
       name: updatedUser.name,
       email: updatedUser.email,
-      role: updatedUser.role,
+      isAdmin: updatedUser.isAdmin, // 🟢 Added
+      role: updatedUser.role,       // 🟢 Added
       token: generateToken(updatedUser._id),
     });
   } else {
@@ -185,6 +184,7 @@ const updateUser = asyncHandler(async (req, res) => {
       _id: updatedUser._id,
       name: updatedUser.name,
       email: updatedUser.email,
+      isAdmin: updatedUser.isAdmin, 
       role: updatedUser.role,
     });
   } else {
@@ -200,7 +200,6 @@ const deleteUser = asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id);
 
   if (user) {
-    // Prevent deleting super_admin
     if (user.role === 'super_admin') {
       res.status(400);
       throw new Error('Cannot delete Super Admin');
