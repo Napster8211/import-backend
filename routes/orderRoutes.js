@@ -10,6 +10,7 @@ const {
   getMyOrders,
   getOrders,
   updateOrderStatus,
+  getDashboardStats, // 🟢 NEW: Don't forget to import this!
 } = require('../controllers/orderController');
 
 // 2. Import Middleware & Permissions
@@ -18,13 +19,20 @@ const { protect, authorize, PERMISSIONS } = require('../middleware/authMiddlewar
 // 3. Define Routes
 
 // --- PUBLIC / CUSTOMER ROUTES ---
-// Any logged-in user can create an order or see "My Orders"
 router.route('/').post(protect, addOrderItems);
 router.route('/myorders').get(protect, getMyOrders);
 
 // --- 🔒 STAFF RESTRICTED ROUTES ---
 
-// 1. View All Orders
+// 🟢 NEW: REPORTS ROUTE (Must be ABOVE /:id)
+// Allowed: Finance, Admin, Viewer
+router.route('/summary').get(
+  protect, 
+  authorize(PERMISSIONS.VIEW_REPORTS), 
+  getDashboardStats
+);
+
+// 1. View All Orders (The "Payment History" List)
 // Allowed: Support, Operations, Finance, Super Admin
 router.route('/').get(
   protect, 
@@ -33,13 +41,9 @@ router.route('/').get(
 );
 
 // 2. Get Single Order
-// Note: We do NOT add strict permission middleware here because 
-// regular customers need to access this too (if they own the order).
-// The Controller logic handles the "Owner vs Admin" check.
 router.route('/:id').get(protect, getOrderById);
 
 // 3. Pay Order
-// Allowed: Finance Only
 router.route('/:id/pay').put(
   protect, 
   authorize(PERMISSIONS.CONFIRM_PAYMENTS), 
@@ -47,15 +51,13 @@ router.route('/:id/pay').put(
 );
 
 // 4. Mark as Delivered
-// Allowed: Operations Only
 router.route('/:id/deliver').put(
   protect, 
   authorize(PERMISSIONS.UPDATE_ORDER_STATUS), 
   updateOrderToDelivered
 );
 
-// 5. Update Custom Status (Processing -> Shipped)
-// Allowed: Operations Only
+// 5. Update Custom Status
 router.route('/:id/status').put(
   protect, 
   authorize(PERMISSIONS.UPDATE_ORDER_STATUS), 
