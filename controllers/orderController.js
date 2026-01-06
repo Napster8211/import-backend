@@ -1,8 +1,10 @@
 const asyncHandler = require('express-async-handler');
-const Order = require('../models/Order');
-const Product = require('../models/Product'); // 🟢 Added for Dashboard Stats
-const User = require('../models/User');       // 🟢 Added for Dashboard Stats
+const Order = require('../models/Order'); // ⚠️ Ensure this file is named 'Order.js' in models/
+const User = require('../models/User');   // ⚠️ Ensure this file is named 'User.js' in models/
 const ShippingConfig = require('../models/ShippingConfig');
+
+// 🟢 FIX: We import from 'productModel' because that is your actual filename
+const Product = require('../models/productModel'); 
 
 // @desc    Create new order
 // @route   POST /api/orders
@@ -25,7 +27,6 @@ const addOrderItems = asyncHandler(async (req, res) => {
     let finalShippingFee = 0;
     
     try {
-      // 1. Fetch Shipping Rules
       const config = await ShippingConfig.findOne();
       
       if (!config) {
@@ -37,7 +38,7 @@ const addOrderItems = asyncHandler(async (req, res) => {
         let totalSeaWeight = 0;
         let totalAirWeight = 0;
 
-        // 2. Separate Items by Category
+        // Separate Items by Category
         orderItems.forEach(item => {
             const weight = item.weight || 0.5; 
             const method = item.shippingCategory || 'sea'; 
@@ -49,35 +50,31 @@ const addOrderItems = asyncHandler(async (req, res) => {
             }
         });
 
-        // 3. Calculate Sea Shipping
+        // Calculate Sea Shipping
         totalSeaWeight = Math.ceil(totalSeaWeight * 10) / 10;
-        
         let seaFee = 0;
         if (totalSeaWeight > 0) {
             seaFee = totalSeaWeight * rates.derived.finalSeaRatePerKg;
             seaFee = Math.max(seaFee, config.minSeaShippingFee);
         }
 
-        // 4. Calculate Air Shipping
+        // Calculate Air Shipping
         let airFee = 0;
         if (totalAirWeight > 0) {
             totalAirWeight = Math.max(totalAirWeight, config.minAirChargeableWeight);
             totalAirWeight = Math.ceil(totalAirWeight * 10) / 10; 
-            
             airFee = totalAirWeight * config.airRatePerKg;
         }
 
         finalShippingFee = seaFee + airFee;
         finalShippingFee = Math.round(finalShippingFee * 100) / 100;
-        
-        console.log(`🚢 Shipping Calc: Sea(${totalSeaWeight}kg) + Air(${totalAirWeight}kg) = GH₵${finalShippingFee}`);
       }
     } catch (err) {
       console.error("Shipping Calc Error:", err);
       finalShippingFee = 50; 
     }
 
-    // 5. Recalculate Total Price
+    // Recalculate Total Price
     const safeTotalPrice = Number(itemsPrice) + Number(taxPrice) + Number(finalShippingFee);
 
     const order = new Order({
@@ -233,7 +230,6 @@ const getDashboardStats = asyncHandler(async (req, res) => {
     });
 });
 
-// 🟢 CRITICAL: Make sure getDashboardStats is included here
 module.exports = {
   addOrderItems,
   getOrderById,
